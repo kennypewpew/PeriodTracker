@@ -1,11 +1,8 @@
 package com.kennypewpew.periodtracker
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.Typeface
 import android.widget.Toast
-import androidx.core.content.res.ResourcesCompat
-import androidx.navigation.R
 import com.applandeo.materialcalendarview.CalendarUtils
 import com.applandeo.materialcalendarview.EventDay
 import java.io.File
@@ -18,7 +15,37 @@ class PeriodInstances {
     private val fmt = SimpleDateFormat("dd/MM/yyyy")
     private var cycleLength = 28
     private var periodLength = 7
+    private var activePeriod = false
+    private var activePeriodStart = Calendar.getInstance()
+    private var initialized = false
 
+    fun init(context: Context?) {
+        if ( !initialized ) {
+            load(context)
+        }
+    }
+
+    fun isPeriodActive(): Boolean {
+        return activePeriod
+    }
+
+    fun startPeriod(c: Calendar) {
+        activePeriodStart = c.clone() as Calendar
+        activePeriod = true
+    }
+
+    fun endPeriod(c: Calendar) {
+        addPeriod(activePeriodStart, c)
+        activePeriod = false
+    }
+
+    fun getPeriodHistory(): List<Pair<Calendar,Calendar>> {
+        return completePeriods as List<Pair<Calendar,Calendar>>
+    }
+
+    fun getActivePeriodDate(): Calendar {
+        return activePeriodStart.clone() as Calendar
+    }
 
     fun getAllPeriodDays(): List<Calendar> {
         var res: MutableList<Calendar> = mutableListOf()
@@ -35,7 +62,12 @@ class PeriodInstances {
     }
 
     private fun getHistoryPlusPredictions(): List<Pair<Calendar,Calendar>> {
-        var res = completePeriods.toMutableList()
+        if ( completePeriods.isEmpty() ) {
+            return mutableListOf()
+        }
+
+        val res = completePeriods.toMutableList()
+
         for ( i in 1..12 ) {
             val s = res.last().first.clone() as Calendar
             s.add(Calendar.DATE, cycleLength)
@@ -52,6 +84,8 @@ class PeriodInstances {
         var res: MutableList<EventDay> = mutableListOf()
 
         val historyPlusPredict = getHistoryPlusPredictions()
+        if ( historyPlusPredict.isEmpty() )
+            return listOf()
 
         val lastStart = completePeriods.last().second.clone() as Calendar
 
@@ -118,35 +152,81 @@ class PeriodInstances {
         completePeriods = completePeriods.filterNot { c -> c.first == start } as MutableList<Pair<Calendar, Calendar>>
     }
 
-    fun saveInstances(context: Context?) {
+    private fun saveActivePeriod(context: Context?) {
+        val flName = "activefile"
+        var output: String
+        if ( activePeriod ) {
+            output = fmt.format(activePeriodStart.timeInMillis)
+        }
+        else {
+            output = fmt.format(0)
+        }
+        context?.openFileOutput(flName, Context.MODE_PRIVATE).use {
+            it?.write(output.toByteArray())
+        }
+    }
+
+    private fun readActivePeriod(context: Context?) {
+        val flCheck = File(context?.getFilesDir(),"activefile")
+        if ( flCheck.exists() ) {
+            val rd = context?.openFileInput(
+                "activefile"
+            )?.bufferedReader()
+            val line = rd?.readLine()
+
+            if (null == line) return
+            else {
+                val raw = fmt.parse(line) as Date
+                val date = Calendar.getInstance() as Calendar
+                date.setTime(raw)
+                if (0.toLong() != date.timeInMillis) {
+                    activePeriod = true
+                    activePeriodStart = date
+                }
+            }
+        }
+    }
+
+    private fun saveInstances(context: Context?) {
         val flName = "datafile"
-        val fl = File(context?.filesDir, flName)
         val output = dataToText()
         context?.openFileOutput(flName, Context.MODE_PRIVATE).use {
             it?.write(output.toByteArray())
         }
     }
 
-    fun readInstances(context: Context?) {
-        val rd = context?.openFileInput("datafile"
-        )?.bufferedReader()
+    private fun readInstances(context: Context?) {
+        val flCheck = File(context?.getFilesDir(),"datafile")
+        if ( flCheck.exists() ) {
+            val rd = context?.openFileInput(
+                "datafile"
+            )?.bufferedReader()
 
-        var line = rd?.readLine()
-        var newData: MutableList<Pair<Calendar, Calendar>> = mutableListOf()
-        while ( null != line ) {
-            val dates = line.split(",")
-            val s = fmt.parse(dates[0])
-            val e = fmt.parse(dates[1])
-            var sc: Calendar = Calendar.getInstance()
-            var ec: Calendar = Calendar.getInstance()
-            sc.setTime(s)
-            ec.setTime(e)
-            newData.add(Pair<Calendar, Calendar>(sc,ec))
-            val toast = Toast.makeText(context, line, Toast.LENGTH_SHORT)
-            toast.show()
-            line = rd?.readLine()
+            var line = rd?.readLine()
+            var newData: MutableList<Pair<Calendar, Calendar>> = mutableListOf()
+            while (null != line) {
+                val dates = line.split(",")
+                val s = fmt.parse(dates[0])
+                val e = fmt.parse(dates[1])
+                var sc: Calendar = Calendar.getInstance()
+                var ec: Calendar = Calendar.getInstance()
+                sc.setTime(s)
+                ec.setTime(e)
+                newData.add(Pair<Calendar, Calendar>(sc, ec))
+                line = rd?.readLine()
+            }
+            completePeriods = newData.toMutableList()
         }
-        completePeriods = newData.toMutableList()
+    }
+
+    fun save(context: Context?) {
+        saveInstances(context)
+        saveActivePeriod(context)
+    }
+
+    fun load(context: Context?) {
+        readInstances(context)
+        readActivePeriod(context)
     }
 
     private fun dataToText() : String {

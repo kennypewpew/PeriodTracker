@@ -1,5 +1,6 @@
 package com.kennypewpew.periodtracker
 
+import android.app.AlertDialog
 import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -44,9 +45,21 @@ class SecondFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.buttonSecond.setOnClickListener {
-            periodData.showInstances(context)
+        periodData.init(context)
+
+        fun highlightEntries(context: Context?){
+            val v = view.findViewById(R.id.calendarView) as mCalendarView
+
+            val dates = periodData.getAllPeriodDays()
+            if ( dates.isNotEmpty() )
+                v.setHighlightedDays(dates)
+
+            val events = periodData.getAllPeriodEvents(context)
+            if ( events.isNotEmpty() )
+                v.setEvents(events)
         }
+
+        highlightEntries(context)
 
         binding.setPeriodStart.setOnClickListener {
 
@@ -65,26 +78,38 @@ class SecondFragment : Fragment() {
             }
         }
 
+
         binding.highlight.setOnClickListener {
-            val v = view.findViewById(R.id.calendarView) as mCalendarView
-
-            val dates = periodData.getAllPeriodDays()
-            v.setHighlightedDays(dates)
-
-            val events = periodData.getAllPeriodEvents(context)
-            v.setEvents(events)
-
-            Toast.makeText(context, dates.size.toString(), Toast.LENGTH_SHORT).show()
-            //v.invalidate()
+            highlightEntries(context)
         }
 
         binding.setPeriodEnd.setOnClickListener {
-            periodData.saveInstances(context)
+            periodData.save(context)
         }
 
         binding.load.setOnClickListener {
-            periodData.readInstances(context)
+            periodData.load(context)
+            val toast = Toast.makeText(context, "loading data", Toast.LENGTH_SHORT)
+            toast.show()
+        }
 
+        binding.buttonStartPeriod.setOnClickListener {
+            if ( periodData.isPeriodActive() ) {
+                val alertBuilder = AlertDialog.Builder(context)
+                val fmt = SimpleDateFormat("dd/MM/yyyy")
+                val current = fmt.format(periodData.getActivePeriodDate().timeInMillis)
+                alertBuilder.setMessage("Overwrite current active period ($current)")
+                alertBuilder.setPositiveButton("Yes") { dialog, which ->
+                    periodData.startPeriod(Calendar.getInstance())
+                }
+                alertBuilder.setNegativeButton("No") { dialog, which ->
+                    return@setNegativeButton
+                }
+                alertBuilder.show()
+            }
+            else {
+                periodData.startPeriod(Calendar.getInstance())
+            }
         }
 
         binding.buttonGotoList.setOnClickListener {
